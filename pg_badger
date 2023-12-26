@@ -1,0 +1,209 @@
+echo "connect using mobaxtrem to the public IP of the Ec2 instance ,username ubuntu & locate private key "
+
+echo "SHELL"
+clear
+sudo su -
+vi /tmp/Install_source.sh
+
+
+#!/bin/sh
+echo "Start of the script . It installes postgres 16 & adds postgres OS user to sudoers list "
+echo " updating hostname in /etc/hosts"
+export source_IP="172.31.44.86"
+echo "$source_IP  source" >> /etc/hosts
+echo " Settting hostname of source host"
+sudo hostnamectl set-hostname source
+echo " Installing postgres 16"
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+sudo apt-get update
+sudo apt-get -y install postgresql-16
+echo " Add postgres OS user to sudoers file "
+echo "postgres  ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+echo " end of the installation script"
+echo " execute the script to install binaries "
+
+
+sudo su -
+sh -x /tmp/Install_source.sh
+
+
+echo " preparing and launching second shell script"
+echo "Setup the required postgres settings on source host "
+sudo su - postgres
+cd /tmp
+vi /tmp/postgres_setting_pg_source.sh
+
+
+echo "Start of the script /tmp/postgres_setting_pg_source.sh"
+#!/bin/sh
+echo"start of the postgres_setting_pg_source.sh script"
+export source_IP="172.31.44.86"
+export client_IP="172.31.37.216"
+echo " Enable remote login so you can connect from a particular IP"
+grep listen /etc/postgresql/16/main/postgresql.conf
+sed -i 's/localhost/*/' /etc/postgresql/16/main/postgresql.conf
+sed -i 's/#listen_addresses/listen_addresses/' /etc/postgresql/16/main/postgresql.conf
+grep listen /etc/postgresql/16/main/postgresql.conf
+cat /etc/postgresql/16/main/pg_hba.conf
+sudo systemctl restart postgresql.service
+echo "Update the hba.conf file "
+psql -c "alter USER postgres PASSWORD 'postgres';"
+
+psql -c "create role client_user with login password 'password' ;"
+echo "host    all     all     $source_IP/32        md5" >> /etc/postgresql/16/main/pg_hba.conf
+echo "host all all $client_IP/32 md5" >> /etc/postgresql/16/main/pg_hba.conf
+psql -c "SELECT pg_reload_conf();"
+sudo systemctl restart postgresql
+psql -c "SELECT pg_reload_conf();"
+echo "End of script /tmp/postgres_setting_pg_source.sh"
+
+sudo su - postgres
+sh -x /tmp/postgres_setting_pg_source.sh
+
+
+
+echo "Setup the pgbadger"
+
+sudo apt-get install pgbadger -y
+
+psql -c "select name,setting,unit from pg_settings where name in ('log_checkpoints','log_connections','log_disconnections','log_lock_waits','log_temp_files','log_autovacuum_min_duration','log_error_verbosity','log_min_duration_statement','log_min_duration_statement','lc_messages');"
+
+psql -c "alter system set log_line_prefix = '%t [%p]: user=%u,db=%d,app=%a,client=%h';"
+psql -c "alter system set log_checkpoints = 'on';"
+psql -c "alter system set log_connections = 'on';"
+psql -c "alter system set log_disconnections = 'on';"
+psql -c "alter system set log_lock_waits = 'on';"
+psql -c "alter system set log_temp_files = 0;"
+psql -c "alter system set log_autovacuum_min_duration = 0;"
+psql -c "alter system set log_error_verbosity = 'default';"
+psql -c "alter system set log_min_duration_statement = 1000;"
+psql -c "alter system set lc_messages='en_US.UTF-8';"
+psql -c "alter system set lc_messages='C';"
+
+sudo systemctl restart postgresql
+
+psql -c " select name,setting,unit from pg_settings where name in ('log_checkpoints','log_connections','log_disconnections','log_lock_waits','log_temp_files','log_autovacuum_min_duration','log_error_verbosity','log_min_duration_statement','log_min_duration_statement','lc_messages');"
+
+ 
+
+echo "Load the Data"
+
+sudo -u postgres psql -c "CREATE DATABASE bench3;"
+sudo -u postgres pgbench -i bench3
+sudo -u postgres pgbench -c50 -t100 bench3
+
+
+
+echo " Load some more data "
+
+echo " Generate some data/ Load Sample Data on VM "
+
+
+echo " create a role and database "
+psql -c  "create role migrationuser with LOGIN SUPERUSER PASSWORD 'secret_password'; "
+psql -c "CREATE DATABASE migrationdb WITH OWNER migrationuser;"
+
+export PGPASSWORD=secret_password
+
+psql -h localhost -U migrationuser  -d migrationdb -c  "create table one_millions_rows as SELECT * FROM generate_series(1,1000000);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE one_millions_rows ADD CONSTRAINT generate_series_pk PRIMARY KEY (generate_series);"
+psql -h localhost -U migrationuser  -d migrationdb -c "create table two_millions_rows as SELECT * FROM generate_series(1,2000000);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE two_millions_rows ADD CONSTRAINT generate_series_pk2 PRIMARY KEY (generate_series);"
+
+psql -h localhost -U migrationuser  -d migrationdb -c"create table three_millions_rows as SELECT * FROM generate_series(1,3000000);"
+psql -h localhost -U migrationuser  -d migrationdb -c "create table four_millions_rows as SELECT * FROM generate_series(1,4000000);"
+
+psql -h localhost -U migrationuser  -d migrationdb -c "create table five_millions_rows as SELECT * FROM generate_series(1,5000000);"
+psql -h localhost -U migrationuser  -d migrationdb -c "create table six_millions_rows as SELECT * FROM generate_series(1,6000000);"
+
+psql -h localhost -U migrationuser  -d migrationdb -c"create table seven_millions_rows as SELECT * FROM generate_series(1,7000000);"
+
+psql -h localhost -U migrationuser  -d migrationdb -c "create table eight_millions_rows as SELECT * FROM generate_series(1,800000);"
+
+psql -h localhost -U migrationuser  -d migrationdb -c "create table nine_millions_rows as SELECT * FROM generate_series(1,900000);"
+
+psql -h localhost -U migrationuser  -d migrationdb -c "create table ten_millions_rows as SELECT * FROM generate_series(1,1000000);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE three_millions_rows ADD CONSTRAINT generate_series_pk3 PRIMARY KEY (generate_series);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE four_millions_rows ADD CONSTRAINT generate_series_pk4 PRIMARY KEY (generate_series);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE five_millions_rows ADD CONSTRAINT generate_series_pk5 PRIMARY KEY (generate_series);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE six_millions_rows ADD CONSTRAINT generate_series_pk6 PRIMARY KEY (generate_series);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE seven_millions_rows ADD CONSTRAINT generate_series_pk7 PRIMARY KEY (generate_series);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE eight_millions_rows ADD CONSTRAINT generate_series_pk8 PRIMARY KEY (generate_series);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE nine_millions_rows ADD CONSTRAINT generate_series_pk9 PRIMARY KEY (generate_series);"
+psql -h localhost -U migrationuser  -d migrationdb -c "ALTER TABLE ten_millions_rows ADD CONSTRAINT generate_series_pk10 PRIMARY KEY (generate_series);"
+
+
+export PGPASSWORD=secret_password
+psql -h localhost -U migrationuser  -d migrationdb -c "\dt+"
+psql -h localhost -U migrationuser  -d migrationdb -c "\di+"
+
+
+echo "Setting up the shared_preload_libraries = 'pg_stat_statements' # (change requires restart)"
+
+psql -c " show shared_preload_libraries;"
+psql -c " alter system set shared_preload_libraries = 'pg_stat_statements' ;"
+sudo systemctl restart postgresql
+psql -c " show shared_preload_libraries;"
+psql -c " alter system set pg_stat_statements.track = 'all';"
+psql -c " alter system set pg_stat_statements.max = '10000';"
+psql -c " alter system set pg_stat_statements.track = 'all';"
+psql -c " alter system set pg_stat_statements.track_utility = 'off';"
+psql -c " alter system set pg_stat_statements.save = 'on';"
+psql -c " alter system set track_io_timing = 'on';"
+psql -c " alter system set track_activity_query_size = '2048';"
+
+
+echo "Now Let's read the data "
+
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from one_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from two_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from three_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from four_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from five_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from six_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from seven_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from eight_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from nine_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from ten_millions_rows ;"
+
+echo "Now Let's Insert some of the data "
+
+psql -h localhost -U migrationuser  -d migrationdb -c  "insert into  one_millions_rows  SELECT * FROM generate_series(1000001,1100001);"
+psql -h localhost -U migrationuser  -d migrationdb -c "insert into two_millions_rows  SELECT * FROM generate_series(2000001,2100001);"
+psql -h localhost -U migrationuser  -d migrationdb -c"insert into  three_millions_rows  SELECT * FROM generate_series(3000001,3100001);"
+psql -h localhost -U migrationuser  -d migrationdb -c "insert into  four_millions_rows  SELECT * FROM generate_series(4000001,4100001);"
+psql -h localhost -U migrationuser  -d migrationdb -c "insert into  five_millions_rows  SELECT * FROM generate_series(5000001,5100001);"
+psql -h localhost -U migrationuser  -d migrationdb -c "insert into  six_millions_rows  SELECT * FROM generate_series(6000001,6100001);"
+psql -h localhost -U migrationuser  -d migrationdb -c"insert into  seven_millions_rows  SELECT * FROM generate_series(7000001,7100001);"
+psql -h localhost -U migrationuser  -d migrationdb -c "insert into  eight_millions_rows  SELECT * FROM generate_series(800001,810001);"
+psql -h localhost -U migrationuser  -d migrationdb -c "insert into  nine_millions_rows  SELECT * FROM generate_series(900001,910001);"
+psql -h localhost -U migrationuser  -d migrationdb -c "insert into  ten_millions_rows  SELECT * FROM generate_series(1000001,1100001);"
+
+
+
+
+echo " read some more data "
+
+psql -h localhost -U migrationuser -d migrationdb -c "select count(*) from one_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from two_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from three_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from four_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from five_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from six_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from seven_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from eight_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from nine_millions_rows ;"
+psql -h localhost -U migrationuser  -d migrationdb -c "select count(*) from ten_millions_rows ;"
+
+
+
+echo " run update queries"
+
+
+
+Now Let's run the report 
+
+mkdir -p /var/log/postgresql/report/
+
+pgbadger /var/log/postgresql/postgresql-16-main.log -O /var/log/postgresql/report/ -o pgbadger_target_`date +\%F`.html
