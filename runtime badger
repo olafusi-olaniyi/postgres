@@ -1,0 +1,55 @@
+Amazon Linux 
+
+sudo yum install -y perl perl-CGI perl-CPAN perl-DBI perl-DBD-Pg perl-Time-HiRes perl-YAML
+sudo apt-get update
+sudo apt-get install -y perl libdbi-perl libdbd-pg-perl libtime-hires-perl libyaml-perl
+sudo cpan App::cpanminus
+sudo cpanm --force --installdeps pg_badger
+sudo cpanm pg_badger
+sudo cpan App::cpanminus
+sudo cpanm --force --installdeps pg_badger
+sudo cpanm pg_badger
+
+
+parameter
+logging_collector = on
+log_statement = 'all'
+log_duration = on
+log_lock_waits = on
+log_statement_stats = on
+log_temp_files = 0
+log_checkpoints = on
+
+
+sudo service postgresql restart
+pg_badger /path/to/postgresql.log
+pg_badger /path/to/postgresql.log -o output.html
+firefox output.html
+
+
+Ubuntu 
+
+sudo apt-get update
+sudo apt-get install -y build-essential libdbi-perl libdbd-pg-perl libtimedate-perl libyaml-perl
+sudo apt-get install -y cpanminus
+sudo cpanm --force --installdeps pg_badger
+sudo cpanm pg_badger
+sudo nano /etc/postgresql/<version>/main/postgresql.conf
+
+
+
+parameter 
+
+logging_collector = on
+log_statement = 'all'
+log_duration = on
+log_lock_waits = on
+log_statement_stats = on
+log_temp_files = 0
+log_checkpoints = on
+
+
+sudo service postgresql restart
+pg_badger /path/to/postgresql.log
+firefox output.html
+
